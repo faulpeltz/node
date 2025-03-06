@@ -5,6 +5,7 @@
 #include "src/snapshot/code-serializer.h"
 
 #include <memory>
+#include <stdint.h>
 
 #include "src/base/logging.h"
 #include "src/base/platform/elapsed-timer.h"
@@ -729,7 +730,11 @@ SerializedCodeSanityCheckResult SerializedCodeData::SanityCheckWithoutSource(
   }
   uint32_t ro_snapshot_checksum =
       GetHeaderValue(kReadOnlySnapshotChecksumOffset);
+      fprintf(stderr, "ro_snapshot_checksum: 0x%X  expected_ro_snapshot_checksum: 0x%X\n",
+        ro_snapshot_checksum,
+        expected_ro_snapshot_checksum);
   if (ro_snapshot_checksum != expected_ro_snapshot_checksum) {
+    CHECK(false);
     return SerializedCodeSanityCheckResult::kReadOnlySnapshotChecksumMismatch;
   }
   uint32_t payload_length = GetHeaderValue(kPayloadLengthOffset);

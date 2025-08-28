@@ -34,10 +34,7 @@
 #include "nghttp3_macro.h"
 
 static int ispow2(size_t n) {
-#if defined(_MSC_VER) && !defined(__clang__) &&                                \
-  (defined(_M_ARM) || (defined(_M_ARM64) && _MSC_VER < 1941))
-  return n && !(n & (n - 1));
-#elif defined(WIN32)
+#if defined(WIN32)
   return 1 == __popcnt((unsigned int)n);
 #else  /* !((defined(_MSC_VER) && !defined(__clang__) && (defined(_M_ARM) ||   \
           (defined(_M_ARM64) && _MSC_VER < 1941))) || defined(WIN32)) */

@@ -1454,6 +1454,9 @@ DirectHandle<String> JSFunction::ToString(DirectHandle<JSFunction> function) {
     DirectHandle<Object> maybe_class_positions = JSReceiver::GetDataProperty(
         isolate, function, isolate->factory()->class_positions_symbol());
     if (IsClassPositions(*maybe_class_positions)) {
+      if (IsUndefined(Cast<String>(Cast<Script>(shared_info->script())->source()))) {
+        return isolate->factory()->NewStringFromAsciiChecked("class {}");
+      }
       Tagged<ClassPositions> class_positions =
           Cast<ClassPositions>(*maybe_class_positions);
       int start_position = class_positions->start();

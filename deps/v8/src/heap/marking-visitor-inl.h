@@ -464,6 +464,13 @@ bool MarkingVisitorBase<ConcreteVisitor>::HasBytecodeArrayForFlushing(
 template <typename ConcreteVisitor>
 bool MarkingVisitorBase<ConcreteVisitor>::ShouldFlushCode(
     Tagged<SharedFunctionInfo> sfi) const {
+  auto script_obj = sfi->script();
+  if (!IsUndefined(script_obj)) {
+    auto script = Cast<Script>(script_obj);
+    if (IsUndefined(script->source())) {
+      return false;
+    }
+  }
   // This method is used both for flushing bytecode and baseline code.
   // During last resort GCs and stress testing we consider all code old.
   return IsOld(sfi) || V8_UNLIKELY(IsForceFlushingEnabled(code_flush_mode_));

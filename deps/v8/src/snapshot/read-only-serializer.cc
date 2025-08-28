@@ -118,6 +118,30 @@ struct ReadOnlySegmentForSerialization {
             segment_size);
     PreProcessSegment(pre_processor);
     if (!V8_STATIC_ROOTS_BOOL) EncodeTaggedSlots(isolate);
+
+    // debug dump after processing
+
+     PrintF("  [FPDEBUG] segment data after postproc\n");
+    uint32_t counter = 0;
+    const Address segment_end = segment_start + segment_size;
+    ReadOnlyPageObjectIterator it(page, segment_start);
+    for (Tagged<HeapObject> o = it.Next(); !o.is_null(); o = it.Next()) {
+      if (o.address() >= segment_end) break;
+      Tagged<Map> map = o->map(isolate);
+      InstanceType instance_type = map->instance_type();
+
+      PrintF("    [FPDEBUG] heapobj/post i=%d s=%d t=%d ptr_o=%zu data=",
+          counter, o->Size(), instance_type, (o.ptr()&~3)- segment_start);
+
+      size_t o_offset = (o.ptr()&~3) - segment_start;
+      const uint8_t* odata = contents.get() + o_offset;
+      for (size_t i = 0; i < o->Size(); i++) {
+          PrintF("%02x", odata[i]);
+      }
+      PrintF("\n");
+      counter++;
+    }
+    PrintF("  [FPDEBUG] end of segment data after postproc\n");
   }
 
   void PreProcessSegment(ObjectPreProcessor* pre_processor) {
@@ -159,6 +183,9 @@ ro::EncodedTagged Encode(Isolate* isolate, Tagged<HeapObject> o) {
   int index = static_cast<int>(ro_space->IndexOf(chunk));
   uint32_t offset = static_cast<int>(chunk->Offset(o_address));
   DCHECK(IsAligned(offset, kTaggedSize));
+
+  PrintF("      [FPDEBUG] encode tagged page_index=%d offset=%u offidx=%u res=%08x\n",
+    index, offset, offset / kTaggedSize, ro::EncodedTagged(index, offset / kTaggedSize).ToUint32());
 
   return ro::EncodedTagged(index, offset / kTaggedSize);
 }
@@ -246,7 +273,15 @@ class EncodeRelocationsVisitor final : public ObjectVisitor {
     DCHECK(IsAligned(slot_offset, kTaggedSize));
 
     // Encode:
+    PrintF("      [FPDEBUG] beforeencode slot_off=%d slot_val=%d ptr_off=%zu\n",
+            slot_offset,AsSlot(slot_offset), o.GetHeapObject().address() - segment_->segment_start);
+
     ro::EncodedTagged encoded = Encode(isolate_, o.GetHeapObject());
+
+    #ifndef V8_COMPRESS_POINTERS
+    memset(segment_->contents.get() + slot_offset, 0, kTaggedSize);
+    #endif
+
     memcpy(segment_->contents.get() + slot_offset, &encoded,
            ro::EncodedTagged::kSize);
 
@@ -274,14 +309,24 @@ void ReadOnlySegmentForSerialization::EncodeTaggedSlots(Isolate* isolate) {
   DCHECK(!V8_STATIC_ROOTS_BOOL);
   EncodeRelocationsVisitor v(isolate, this);
   PtrComprCageBase cage_base(isolate);
-
+  // TODO even more logging
   DCHECK_GE(segment_start, page->area_start());
   const Address segment_end = segment_start + segment_size;
   ReadOnlyPageObjectIterator it(page, segment_start,
                                 SkipFreeSpaceOrFiller::kNo);
+  uint32_t counter = 0;
   for (Tagged<HeapObject> o = it.Next(); !o.is_null(); o = it.Next()) {
     if (o.address() >= segment_end) break;
-    VisitObject(isolate, o, &v);
+
+    Tagged<Map> map = o->map(isolate);
+    InstanceType instance_type = map->instance_type();
+
+    PrintF("  [FPDEBUG] tag heapobj i=%zu so=%zu s=%d t=%d\n",
+      counter, o.address()-segment_start, o->Size(), instance_type);
+      VisitObject(isolate, o, &v);
+
+
+      counter++;
   }
 }
 
@@ -307,6 +352,14 @@ class ReadOnlyHeapImageSerializer {
     DCHECK_EQ(sink_->Position(), 0);
 
     ReadOnlySpace* ro_space = isolate_->read_only_heap()->read_only_space();
+    #ifdef V8_COMPRESS_POINTERS
+      bool pce=true;
+  #else
+      bool pce=false;
+  #endif
+
+    PrintF("[FPDEBUG] begin serialize readonly ro_space=%p efa=%u epd=%u pce=%d\n",
+      ro_space, RootIndex::kEmptyFixedArray,  RootIndex::kEmptyPropertyDictionary, pce);
 
     // Allocate all pages first s.t. the deserializer can easily handle forward
     // references (e.g.: an object on page i points at an object on page i+1).
@@ -321,6 +374,8 @@ class ReadOnlyHeapImageSerializer {
 
     EmitReadOnlyRootsTable();
     sink_->Put(Bytecode::kFinalizeReadOnlySpace, "space end");
+
+    PrintF("[FPDEBUG] end serialize readonly\n");
   }
 
   uint32_t IndexOf(const ReadOnlyPageMetadata* page) {
@@ -339,6 +394,12 @@ class ReadOnlyHeapImageSerializer {
     sink_->PutUint30(
         static_cast<uint32_t>(page->HighWaterMark() - page->area_start()),
         "area size in bytes");
+
+    PrintF("[FPDEBUG] emit allocate page area_ro_space_off=%zu, area_start=%p idx=%d size=%d \n",
+        ((uint8_t*)(page->area_start()))-((uint8_t*)(isolate_->read_only_heap()->read_only_space())),
+        page->area_start(),
+        IndexOf(page),
+        static_cast<uint32_t>(page->HighWaterMark() - page->area_start()));
     if (V8_STATIC_ROOTS_BOOL) {
       auto page_addr = page->ChunkAddress();
       sink_->PutUint32(V8HeapCompressionScheme::CompressAny(page_addr),
@@ -350,6 +411,7 @@ class ReadOnlyHeapImageSerializer {
                      const std::vector<MemoryRegion>& unmapped_regions) {
     Address pos = page->area_start();
 
+    PrintF("[FPDEBUG] serialize page addr=%p\n");
     // If this page contains unmapped regions split it into multiple segments.
     for (auto r = unmapped_regions.begin(); r != unmapped_regions.end(); ++r) {
       // Regions must be sorted and non-overlapping.
@@ -372,9 +434,17 @@ class ReadOnlyHeapImageSerializer {
     ReadOnlySegmentForSerialization segment(isolate_, page, pos, segment_size,
                                             &pre_processor_);
     EmitSegment(&segment);
+    PrintF("[FPDEBUG] last segment\n");
   }
 
   void EmitSegment(const ReadOnlySegmentForSerialization* segment) {
+      PrintF("  [FPDEBUG] segment segment_start=%p page_index=%d offset=%zu size=%zu tagged_slots=%zu\n",
+        segment->segment_start,
+        IndexOf(segment->page),
+        segment->segment_offset,
+        segment->segment_size,
+        segment->tagged_slots.size_in_bytes());
+
     sink_->Put(Bytecode::kSegment, "segment begin");
     sink_->PutUint30(IndexOf(segment->page), "page index");
     sink_->PutUint30(static_cast<uint32_t>(segment->segment_offset),
@@ -383,11 +453,27 @@ class ReadOnlyHeapImageSerializer {
                      "segment byte size");
     sink_->PutRaw(segment->contents.get(),
                   static_cast<int>(segment->segment_size), "page");
+     PrintF("    [FPDEBUG] segment_contents: ");
+      const uint8_t* cdata = reinterpret_cast<const uint8_t*>(segment->contents.get());
+      for (size_t i = 0; i < segment->segment_size; i++) {
+          if (i%64==0) {PrintF("\n    [FPDEBUG]  ");}
+          PrintF("%02x", cdata[i]);
+      }
+      PrintF("\n");
+
     if (!V8_STATIC_ROOTS_BOOL) {
       sink_->Put(Bytecode::kRelocateSegment, "relocate segment");
       sink_->PutRaw(segment->tagged_slots.data(),
                     static_cast<int>(segment->tagged_slots.size_in_bytes()),
                     "tagged_slots");
+    PrintF("    [FPDEBUG] tagged_slots: ");
+      const uint8_t* tdata = segment->tagged_slots.data();
+      for (size_t i = 0; i < segment->tagged_slots.size_in_bytes(); i++) {
+        if (i%64==0) {PrintF("\n    [FPDEBUG]  ");}
+          PrintF("%02x", tdata[i]);
+      }
+      PrintF("\n");
+
     }
   }
 
@@ -395,11 +481,18 @@ class ReadOnlyHeapImageSerializer {
     sink_->Put(Bytecode::kReadOnlyRootsTable, "read only roots table");
     if (!V8_STATIC_ROOTS_BOOL) {
       ReadOnlyRoots roots(isolate_);
+     PrintF("[FPDEBUG] readonly roots %d\n", ReadOnlyRoots::kEntriesCount);
       for (size_t i = 0; i < ReadOnlyRoots::kEntriesCount; i++) {
         RootIndex rudi = static_cast<RootIndex>(i);
         Tagged<HeapObject> rudolf = Cast<HeapObject>(roots.object_at(rudi));
+
+        Tagged<Map> map = rudolf->map(isolate_);
+        InstanceType instance_type = map->instance_type();
+
         ro::EncodedTagged encoded = Encode(isolate_, rudolf);
         sink_->PutUint32(encoded.ToUint32(), "read only roots entry");
+        PrintF("  [FPDEBUG] readonly root i=%zu e=%x s=%d t=%d\n",
+            i, encoded.ToUint32(), rudolf->Size(), instance_type);
       }
     }
   }

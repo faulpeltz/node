@@ -4347,7 +4347,11 @@ void Script::InitLineEndsInternal(IsolateT* isolate,
 
 void Script::SetSource(Isolate* isolate, DirectHandle<Script> script,
                        DirectHandle<String> source) {
-  script->set_source(*source);
+  if (source->length() > 0) {
+    script->set_source(*source);
+  } else {
+    script->set_source(*isolate->factory()->undefined_value());
+  }
   if (isolate->NeedsSourcePositions()) {
     InitLineEnds(isolate, script);
   } else if (script->line_ends() ==

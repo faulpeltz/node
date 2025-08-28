@@ -21,7 +21,7 @@
 // This is a check that always calls into the runtime if it aborts.
 // This also exits silently when --hole-fuzzing is enabled.
 #define CSA_HOLE_SECURITY_CHECK(csa, x) \
-  (csa)->Check([&]() -> TNode<BoolT> { return x; }, #x, __FILE__, __LINE__)
+  (csa)->Check([&]() -> TNode<BoolT> { return x; }, #x, "placeholder", 1)
 
 #ifdef DEBUG
 // CSA_DCHECK_ARGS generates an

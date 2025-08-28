@@ -1096,11 +1096,15 @@ wasm::WasmCompilationResult CompileWasmImportCallWrapper(
                                  "wasm-to-js-%d-", static_cast<int>(kind));
   PrintSignature(base::VectorOf(func_name, kMaxNameLen) + name_prefix_len, sig,
                  '-');
+  wasm::WrapperCompilationInfo info;
+  info.code_kind = CodeKind::WASM_TO_JS_FUNCTION;
+  info.import_kind = kind;
+  info.expected_arity = expected_arity;
+  info.suspend = suspend;
 
   auto result = Pipeline::GenerateCodeForWasmNativeStubFromTurboshaft(
       sig,
-      wasm::WrapperCompilationInfo{CodeKind::WASM_TO_JS_FUNCTION, kind,
-                                   expected_arity, suspend},
+      info,
       func_name, WasmStubAssemblerOptions(), nullptr);
 
   if (V8_UNLIKELY(v8_flags.trace_wasm_compilation_times)) {

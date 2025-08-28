@@ -417,6 +417,7 @@ void Parse(
 // TODO(addaleax): Make that unnecessary.
 
 DebugOptionsParser::DebugOptionsParser() {
+  return;
 #ifndef DISABLE_SINGLE_EXECUTABLE_APPLICATION
   if (sea::IsSingleExecutable()) return;
 #endif

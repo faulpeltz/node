@@ -771,10 +771,6 @@ SerializedCodeSanityCheckResult SerializedCodeData::SanityCheck(
 
 SerializedCodeSanityCheckResult SerializedCodeData::SanityCheckJustSource(
     uint32_t expected_source_hash) const {
-  uint32_t source_hash = GetHeaderValue(kSourceHashOffset);
-  if (source_hash != expected_source_hash) {
-    return SerializedCodeSanityCheckResult::kSourceMismatch;
-  }
   return SerializedCodeSanityCheckResult::kSuccess;
 }
 
@@ -790,10 +786,6 @@ SerializedCodeSanityCheckResult SerializedCodeData::SanityCheckWithoutSource(
   uint32_t version_hash = GetHeaderValue(kVersionHashOffset);
   if (version_hash != Version::Hash()) {
     return SerializedCodeSanityCheckResult::kVersionMismatch;
-  }
-  uint32_t flags_hash = GetHeaderValue(kFlagHashOffset);
-  if (flags_hash != FlagList::Hash()) {
-    return SerializedCodeSanityCheckResult::kFlagsMismatch;
   }
   uint32_t ro_snapshot_checksum =
       GetHeaderValue(kReadOnlySnapshotChecksumOffset);

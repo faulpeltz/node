@@ -355,6 +355,8 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
     return env->RunSnapshotDeserializeMain();
   }
 
+  StartExecution(env, "internal/bootstrap/pkg");
+
   if (env->worker_context() != nullptr) {
     return StartExecution(env, "internal/main/worker_thread");
   }
@@ -579,14 +581,6 @@ static void PlatformInit(ProcessInitializationFlags::Flags flags) {
   }
 
   if (!(flags & ProcessInitializationFlags::kNoDefaultSignalHandling)) {
-#if HAVE_INSPECTOR
-    sigset_t sigmask;
-    sigemptyset(&sigmask);
-    sigaddset(&sigmask, SIGUSR1);
-    const int err = pthread_sigmask(SIG_SETMASK, &sigmask, nullptr);
-    CHECK_EQ(err, 0);
-#endif  // HAVE_INSPECTOR
-
     ResetSignalHandlers();
   }
 

@@ -42,6 +42,7 @@ bool ParseProgram(ParseInfo* info, DirectHandle<Script> script,
   DCHECK(info->flags().is_toplevel());
   DCHECK_NULL(info->literal());
 
+  if (IsUndefined(Cast<String>(script->source()))) return false;
   VMState<PARSER> state(isolate);
 
   // Create a character stream for the parser.
@@ -75,6 +76,8 @@ bool ParseFunction(ParseInfo* info,
 
   // Create a character stream for the parser.
   DirectHandle<Script> script(Cast<Script>(shared_info->script()), isolate);
+  if (IsUndefined(Cast<String>(script->source()))) return false;
+
   Handle<String> source(Cast<String>(script->source()), isolate);
   uint32_t start_pos = shared_info->StartPosition();
   uint32_t end_pos = shared_info->EndPosition();

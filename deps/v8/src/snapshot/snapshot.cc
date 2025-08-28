@@ -585,6 +585,10 @@ v8::StartupData SnapshotImpl::CreateSnapshotBlob(
       Checksum(base::VectorOf(
           reinterpret_cast<const uint8_t*>(data + payload_offset),
           payload_length)));
+  PrintF("[FPDEBUG] ReadOnlySnapshotChecksum: %08x\n",
+    Checksum(base::VectorOf(
+          reinterpret_cast<const uint8_t*>(data + payload_offset),
+          payload_length)));
   if (v8_flags.serialization_statistics) {
     // These prints must match the regexp in test/memory/Memory.json
     PrintF("%10d bytes for read-only\n", payload_length);

@@ -87,6 +87,7 @@ using v8::Symbol;
 using v8::Uint32;
 using v8::UnboundScript;
 using v8::Value;
+using v8::V8;
 
 // The vm module executes code in a sandboxed environment with a different
 // global object than the rest of the code. This is achieved by applying
@@ -994,13 +995,13 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
   Local<ArrayBufferView> cached_data_buf;
   bool produce_cached_data = false;
   Local<Context> parsing_context = context;
-
+  bool sourceless = false;
   Local<Symbol> id_symbol;
   if (argc > 2) {
     // new ContextifyScript(code, filename, lineOffset, columnOffset,
     //                      cachedData, produceCachedData, parsingContext,
-    //                      hostDefinedOptionId)
-    CHECK_EQ(argc, 8);
+    //                      hostDefinedOptionId, sourceless)
+    CHECK_GE(argc, 8);
     CHECK(args[2]->IsNumber());
     line_offset = args[2].As<Int32>()->Value();
     CHECK(args[3]->IsNumber());
@@ -1021,6 +1022,11 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
     }
     CHECK(args[7]->IsSymbol());
     id_symbol = args[7].As<Symbol>();
+
+    if (argc > 8) {
+      CHECK(args[8]->IsBoolean());
+        sourceless = args[8]->IsTrue();
+    }
   }
 
   ContextifyScript* contextify_script = New(env, args.This());
@@ -1067,6 +1073,10 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
   ShouldNotAbortOnUncaughtScope no_abort_scope(env);
   Context::Scope scope(parsing_context);
 
+  if (sourceless && produce_cached_data) {
+    V8::EnableCompilationForSourcelessUse();
+  }
+
   MaybeLocal<UnboundScript> maybe_v8_script =
       ScriptCompiler::CompileUnboundScript(isolate, &source, compile_options);
 
@@ -1079,6 +1089,12 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
     TRACE_EVENT_END0(TRACING_CATEGORY_NODE2(vm, script),
                      "ContextifyScript::New");
     return;
+  }
+
+  if (sourceless && compile_options == ScriptCompiler::kConsumeCodeCache) {
+    if (!source.GetCachedData()->rejected) {
+      V8::FixSourcelessScript(env->isolate(), v8_script);
+    }
   }
 
   contextify_script->set_unbound_script(v8_script);
@@ -1117,6 +1133,10 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
                 v8_script->GetSourceMappingURL())
           .IsNothing())
     return;
+
+  if (sourceless && produce_cached_data) {
+    V8::DisableCompilationForSourcelessUse();
+  }
 
   TRACE_EVENT_END0(TRACING_CATEGORY_NODE2(vm, script), "ContextifyScript::New");
 }

@@ -3945,7 +3945,7 @@ MaybeDirectHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_script = lookup_result.script();
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
-    if (!maybe_result.is_null()) {
+    if (!maybe_result.is_null() && source->length()) {
       compile_timer.set_hit_isolate_cache();
     } else if (can_consume_code_cache) {
       compile_timer.set_consuming_code_cache();
